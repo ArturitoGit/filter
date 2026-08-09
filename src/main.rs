@@ -1,7 +1,7 @@
 mod parse_args;
 
 use parse_args::parse_args;
-use filter::{print_not_in};
+use filter::handle;
 use std::env;
 
 fn main() {
@@ -14,7 +14,7 @@ fn main() {
         }
     };
 
-    let result = print_not_in(&options);
+    let result = handle(&options);
     if let Err(err) = result {
         eprintln!("Error : {err}");
     }

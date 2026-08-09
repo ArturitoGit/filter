@@ -1,20 +1,42 @@
 use std::io;
 use std::io::{BufReader,BufRead};
 use std::fs::File;
+use crate::Filter::*;
+use crate::Column::*;
 
-pub struct Options {
-    pub stdin_column: Column,
-    pub arg_file_column: Column,
-    pub arg_file_name: String
+#[derive(PartialEq, Debug)]
+pub enum Filter {
+    NotInArgFile,
+    AlsoInArgFile
 }
 
+#[derive(PartialEq, Debug)]
+pub struct Options {
+    pub action: Filter,
+    pub stdin_column: Column,
+    pub arg_file_name: String,
+    pub arg_file_column: Column
+}
+
+#[derive(PartialEq, Debug)]
 pub enum Column {
     EntireLine,
     ColumnInfo(usize, String)
 }
 
+pub fn handle(options: &Options) -> std::io::Result<()> {
+    match &options.action {
+        NotInArgFile => {
+            print_not_in(options)
+        }
+        AlsoInArgFile => {
+            print_also_in(options)
+        }
+    }
+}
+
 // Read lines from stdin, print those who are not present in arg file
-pub fn print_not_in(options: &Options) -> std::io::Result<()> {
+fn print_not_in(options: &Options) -> std::io::Result<()> {
 
     let arg_file_fields = parse(&options.arg_file_column, &options.arg_file_name)?;
 
@@ -26,6 +48,28 @@ pub fn print_not_in(options: &Options) -> std::io::Result<()> {
             }
             Some(field) => {
                 if !contains(field, &arg_file_fields) {
+                    println!("{}", &line);
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+// Read lines from stdin, print those who are also present in arg file
+fn print_also_in(options: &Options) -> std::io::Result<()> {
+
+    let arg_file_fields = parse(&options.arg_file_column, &options.arg_file_name)?;
+
+    for line in io::stdin().lines() {
+        let line = line?;
+        match extract(&options.stdin_column, &line) {
+            None => {
+                eprintln!("Could not parse field from line {}", &line);
+            }
+            Some(field) => {
+                if contains(field, &arg_file_fields) {
                     println!("{}", &line);
                 }
             }
@@ -52,9 +96,9 @@ fn parse(column: &Column, filename: &str) -> std::io::Result<Vec<String>> {
 // Extract the field from given column in given line
 fn extract<'a>(column: &Column, line: &'a str) -> Option<&'a str> {
     return match column {
-        Column::EntireLine => Some(line),
+        EntireLine => Some(line),
 
-        Column::ColumnInfo(index, separator) => {
+        ColumnInfo(index, separator) => {
             let fields: Vec<&str> = line.split(separator).collect();
             if fields.len() <= *index {
                 return None;

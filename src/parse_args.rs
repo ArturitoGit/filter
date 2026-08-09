@@ -1,4 +1,6 @@
-use filter::{Column, Options};
+use filter::{Column, Options, Filter};
+use filter::Filter::*;
+use filter::Column::*;
 
 pub fn parse_args<T: Iterator<Item = String>>(mut args: T) -> Result<Options, String> {
 
@@ -8,6 +10,10 @@ pub fn parse_args<T: Iterator<Item = String>>(mut args: T) -> Result<Options, St
     args.next();
 
     while let Some(arg) = args.next() {
+
+        if parse_action(&arg, &mut options_builder)? {
+            continue;
+        }
 
         if parse_stdin_field_index(&arg, &mut args, &mut options_builder)? {
             continue;
@@ -23,6 +29,21 @@ pub fn parse_args<T: Iterator<Item = String>>(mut args: T) -> Result<Options, St
 
     options_builder.build()
 }
+
+fn parse_action(next_arg: &str, options: &mut OptionsBuilder) -> Result<bool, String> {
+    if next_arg == "--not-in" {
+        options.action(NotInArgFile);
+        return Ok(true);
+    }
+
+    if next_arg == "--also-in" || next_arg == "--in" {
+        options.action(AlsoInArgFile);
+        return Ok(true);
+    }
+
+    return Ok(false);
+}
+
 
 fn parse_stdin_field_index<T>(next_arg: &str, mut args: T, options: &mut OptionsBuilder) -> Result<bool, String>
     where T: Iterator<Item = String>
@@ -117,11 +138,12 @@ fn parse_arg_file(arg: &str, options_builder: &mut OptionsBuilder) {
         separator = String::from(segments[2]);
     }
 
-    let column = Column::ColumnInfo(index, separator);
+    let column = ColumnInfo(index, separator);
     options_builder.arg_file_column(column);
 }
 
 struct OptionsBuilder {
+    action: Filter,
     arg_file_name: Option<String>,
     arg_file_column: Column,
     stdin_column: Column
@@ -130,9 +152,10 @@ struct OptionsBuilder {
 impl OptionsBuilder {
     fn new() -> Self {
         Self {
+            action: NotInArgFile,
             arg_file_name: None,
-            arg_file_column: Column::EntireLine,
-            stdin_column: Column::EntireLine
+            arg_file_column: EntireLine,
+            stdin_column: EntireLine
         }
     }
 
@@ -146,9 +169,10 @@ impl OptionsBuilder {
         };
 
         Ok(Options {
+            action: self.action,
+            stdin_column: self.stdin_column,
             arg_file_name,
-            arg_file_column: self.arg_file_column,
-            stdin_column: self.stdin_column
+            arg_file_column: self.arg_file_column
         })
     }
 
@@ -162,18 +186,22 @@ impl OptionsBuilder {
 
     fn stdin_separator(&mut self, separator: String) {
         let field_index = match self.stdin_column {
-            Column::EntireLine => 0,
-            Column::ColumnInfo(index, _) => index
+            EntireLine => 0,
+            ColumnInfo(index, _) => index
         };
-        self.stdin_column = Column::ColumnInfo(field_index, separator);
+        self.stdin_column = ColumnInfo(field_index, separator);
     }
 
     fn stdin_field_index(&mut self, field_index: usize) {
         let separator = match &self.stdin_column {
-            Column::EntireLine => String::from(";"),
-            Column::ColumnInfo(_, separator) => String::from(separator)
+            EntireLine => String::from(";"),
+            ColumnInfo(_, separator) => String::from(separator)
         };
-        self.stdin_column = Column::ColumnInfo(field_index, separator);
+        self.stdin_column = ColumnInfo(field_index, separator);
+    }
+
+    fn action(&mut self, action: Filter) {
+        self.action = action;
     }
 }
 
@@ -181,36 +209,9 @@ impl OptionsBuilder {
 mod tests {
     use super::*;
 
-    fn parse(vec: Vec<&str>) -> Result<Options, String> {
-        let iterator = vec.into_iter().map(|s| String::from(s));
-        parse_args(iterator)
-    }
-
-    fn describe(column: &Column) -> String {
-        match column {
-            Column::EntireLine => String::from("EntireLine"),
-            Column::ColumnInfo(index, separator) => format!("[Column {index} {separator}]")
-        }
-    }
-
-    fn assert_eq_column(expected: &Column, actual: &Column) {
-        match expected {
-            Column::EntireLine => {
-                if let Column::EntireLine = actual {
-                    // Ok
-                } else {
-                    panic!("Expected column EntireLine, got {}", describe(actual));
-                }
-            }
-            Column::ColumnInfo(expected_size, expected_separator) => {
-                if let Column::ColumnInfo(actual_size, actual_separator) = actual {
-                    assert_eq!(expected_size, actual_size);
-                    assert_eq!(expected_separator, actual_separator);
-                } else {
-                    panic!("Expected ColumnInfo, got EntireLine");
-                }
-            }
-        }
+    fn parse(cmd_line: &str) -> Result<Options, String> {
+        let args = cmd_line.split(' ').map(|s| String::from(s));
+        parse_args(args)
     }
 
     fn assert_ok_options(actual: &Result<Options, String>, expected: Options) {
@@ -219,9 +220,7 @@ mod tests {
                 panic!("{err}");
             }
             Ok(actual) => {
-                assert_eq!(expected.arg_file_name, actual.arg_file_name);
-                assert_eq_column(&expected.arg_file_column, &actual.arg_file_column);
-                assert_eq_column(&expected.stdin_column, &actual.stdin_column);
+                assert_eq!(&expected, actual);
             }
         }
     }
@@ -239,93 +238,123 @@ mod tests {
 
     #[test]
     fn single_filename() {
-        let result = parse(vec!["filter", "test.csv"]);
+        let result = parse("filter --not-in test.csv");
         assert_ok_options(&result, Options {
+            action: NotInArgFile,
             arg_file_name: String::from("test.csv"),
-            arg_file_column: Column::EntireLine,
-            stdin_column: Column::EntireLine
+            arg_file_column: EntireLine,
+            stdin_column: EntireLine
         });
     }
 
     #[test]
     fn filename_field_index() {
-        let result = parse(vec!["filter", "test.csv:3"]);
+        let result = parse("filter --not-in test.csv:3");
         assert_ok_options(&result, Options {
+            action: NotInArgFile,
             arg_file_name: String::from("test.csv"),
-            arg_file_column: Column::ColumnInfo(3, String::from(";")),
-            stdin_column: Column::EntireLine
+            arg_file_column: ColumnInfo(3, String::from(";")),
+            stdin_column: EntireLine
         });
     }
 
     #[test]
     fn filename_arg_file_column() {
-        let result = parse(vec!["filter", "test.tsv:3:,"]);
+        let result = parse("filter --not-in test.tsv:3:,");
         assert_ok_options(&result, Options {
+            action: NotInArgFile,
             arg_file_name: String::from("test.tsv"),
-            arg_file_column: Column::ColumnInfo(3, String::from(",")),
-            stdin_column: Column::EntireLine
+            arg_file_column: ColumnInfo(3, String::from(",")),
+            stdin_column: EntireLine
         });
     }
 
     #[test]
     fn missing_filename() {
-        let result = parse(vec!["filter"]);
+        let result = parse("filter --not-in");
         assert_err(&result, "Missing filename");
     }
 
     #[test]
     fn stdin_field_index() {
-        let result = parse(vec!["filter", "-f", "7", "test.tsv:3:,"]);
+        let result = parse("filter --not-in -f 7 test.tsv:3:,");
         assert_ok_options(&result, Options {
+            action: NotInArgFile,
             arg_file_name: String::from("test.tsv"),
-            arg_file_column: Column::ColumnInfo(3, String::from(",")),
-            stdin_column: Column::ColumnInfo(7, String::from(";"))
+            arg_file_column: ColumnInfo(3, String::from(",")),
+            stdin_column: ColumnInfo(7, String::from(";"))
         });
     }
 
     #[test]
     fn invalid_field_index() {
-        let result = parse(vec!["filter", "-f", "some", "test.tsv:3:,"]);
+        let result = parse("filter --not-in -f some test.tsv:3:,");
         assert_err(&result, "the field index argument should be an integer");
     }
 
     #[test]
     fn stdin_separator() {
-        let result = parse(vec!["filter", "-s", "|", "test.tsv:3:,"]);
+        let result = parse("filter --not-in -s | test.tsv:3:,");
         assert_ok_options(&result, Options {
+            action: NotInArgFile,
             arg_file_name: String::from("test.tsv"),
-            arg_file_column: Column::ColumnInfo(3, String::from(",")),
-            stdin_column: Column::ColumnInfo(0, String::from("|"))
+            arg_file_column: ColumnInfo(3, String::from(",")),
+            stdin_column: ColumnInfo(0, String::from("|"))
         });
     }
 
     #[test]
     fn stdin_field_index_onearg() {
-        let result = parse(vec!["filter", "-f10", "test.tsv"]);
+        let result = parse("filter --not-in -f10 test.tsv");
         assert_ok_options(&result, Options {
+            action: NotInArgFile,
             arg_file_name: String::from("test.tsv"),
-            arg_file_column: Column::EntireLine,
-            stdin_column: Column::ColumnInfo(10, String::from(";"))
+            arg_file_column: EntireLine,
+            stdin_column: ColumnInfo(10, String::from(";"))
         });
     }
 
     #[test]
     fn stdin_separator_close() {
-        let result = parse(vec!["filter", "-s|", "test.tsv"]);
+        let result = parse("filter --not-in -s| test.tsv");
         assert_ok_options(&result, Options {
+            action: NotInArgFile,
             arg_file_name: String::from("test.tsv"),
-            arg_file_column: Column::EntireLine,
-            stdin_column: Column::ColumnInfo(0, String::from("|"))
+            arg_file_column: EntireLine,
+            stdin_column: ColumnInfo(0, String::from("|"))
         });
     }
 
     #[test]
     fn complete() {
-        let result = parse(vec!["filter", "-f", "7", "-s", ":", "test.tsv:2:+"]);
+        let result = parse("filter --not-in -f 7 -s : test.tsv:2:+");
         assert_ok_options(&result, Options {
+            action: NotInArgFile,
             arg_file_name: String::from("test.tsv"),
-            arg_file_column: Column::ColumnInfo(2, String::from("+")),
-            stdin_column: Column::ColumnInfo(7, String::from(":"))
+            arg_file_column: ColumnInfo(2, String::from("+")),
+            stdin_column: ColumnInfo(7, String::from(":"))
+        });
+    }
+
+    #[test]
+    fn action_also_in() {
+        let result = parse("filter -f 7 -s : --also-in test.tsv:2:+");
+        assert_ok_options(&result, Options {
+            action: AlsoInArgFile,
+            arg_file_name: String::from("test.tsv"),
+            arg_file_column: ColumnInfo(2, String::from("+")),
+            stdin_column: ColumnInfo(7, String::from(":"))
+        });
+    }
+
+    #[test]
+    fn action_also_in_short() {
+        let result = parse("filter --in test.tsv");
+        assert_ok_options(&result, Options {
+            action: AlsoInArgFile,
+            arg_file_name: String::from("test.tsv"),
+            arg_file_column: EntireLine,
+            stdin_column: EntireLine
         });
     }
 }
