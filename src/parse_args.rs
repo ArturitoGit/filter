@@ -69,11 +69,8 @@ fn parse_stdin_field_index<T>(next_arg: &str, mut args: T, options: &mut Options
     }
 
     // Parse value
-    let value = match value {
-        None => {
-            return Ok(false);
-        }
-        Some(value) => value
+    let Some(value) = value else {
+        return Ok(false);
     };
 
     let field_index: usize = match value.parse() {
