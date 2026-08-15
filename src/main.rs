@@ -1,21 +1,17 @@
+mod args;
 mod parse_args;
+mod input;
+mod dispatch;
+mod not_in;
 
-use parse_args::parse_args;
-use filter::handle;
+use parse_args::parse;
+use dispatch::handle;
+
 use std::env;
+use std::error::Error;
 
-fn main() {
-
-    let options = match parse_args(env::args()) {
-        Ok(options) => options,
-        Err(err) => {
-            eprintln!("Invalid argument : {err}");
-            return;
-        }
-    };
-
-    let result = handle(&options);
-    if let Err(err) = result {
-        eprintln!("Error : {err}");
-    }
+fn main() -> Result<(), Box<dyn Error>> {
+    let args = parse(env::args())?;
+    handle(args)?;
+    Ok(())
 }
