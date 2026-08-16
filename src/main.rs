@@ -2,7 +2,7 @@ mod args;
 mod parse_args;
 mod input;
 mod dispatch;
-mod not_in;
+mod handle_compare;
 
 use parse_args::parse;
 use dispatch::handle;
