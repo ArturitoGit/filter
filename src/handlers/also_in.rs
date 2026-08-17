@@ -1,10 +1,12 @@
-use crate::args::{Arguments, Source, FilterType};
-use crate::args::FilterType::*;
-use crate::input::{open, Input};
+use crate::arg::args::{
+    Arguments, Source, FilterType,
+    FilterType::*
+};
+use crate::handlers::input::{open, Input};
 
 use std::error::Error;
 
-pub fn handle_compare(args: Arguments) -> Result<(), Box<dyn Error>> {
+pub fn handle(args: Arguments) -> Result<(), Box<dyn Error>> {
     let Arguments { source, target, filter } = args;
 
     // The target file is mandatory
@@ -57,7 +59,7 @@ fn error(msg: &str) -> Box<dyn Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::input::tests::*;
+    use crate::handlers::input::tests::*;
 
     #[test]
     fn it_handles_fields() {

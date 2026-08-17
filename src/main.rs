@@ -1,13 +1,9 @@
-mod args;
-mod parse_args;
-mod input;
-mod handle_compare;
-mod duplicates;
+mod arg;
+mod handlers;
 
-use parse_args::parse;
-use args::FilterType::*;
-use handle_compare::handle_compare;
-use duplicates::handle_duplicates;
+use arg::parse_args::parse;
+use arg::args::FilterType::*;
+use handlers::{also_in, duplicates};
 
 use std::env;
 use std::error::Error;
@@ -15,7 +11,7 @@ use std::error::Error;
 fn main() -> Result<(), Box<dyn Error>> {
     let args = parse(env::args())?;
     match &args.filter {
-        NotIn | AlsoIn =>  handle_compare(args),
-        Duplicates | Uniques => handle_duplicates(args)
+        NotIn | AlsoIn =>  also_in::handle(args),
+        Duplicates | Uniques => duplicates::handle(args)
     }
 }

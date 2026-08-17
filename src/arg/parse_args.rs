@@ -1,6 +1,8 @@
-use crate::args::{Arguments, FilterType, CsvFile, Source, Column};
-use crate::args::FilterType::*;
-use crate::args::Column::*;
+use crate::arg::args::{
+    Arguments, FilterType, CsvFile, Source, Column,
+    FilterType::*,
+    Column::*
+};
 
 pub fn parse(mut args: impl Iterator<Item = String>) -> Result<Arguments, String> {
 

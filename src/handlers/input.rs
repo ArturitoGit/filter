@@ -1,4 +1,4 @@
-use crate::args::{Column, Source, CsvFile};
+use crate::arg::args::{Column, Source, CsvFile};
 
 use std::io;
 use std::io::{Stdin, Read, Lines, BufReader, BufRead};
@@ -76,7 +76,7 @@ impl<T: Read> Iterator for LineReaderInput<T> {
 pub mod tests {
     use super::*;
     use std::vec::IntoIter;
-    use crate::args::{Column};
+    use crate::arg::args::{Column};
 
     pub struct VecInput {
         lines: IntoIter<String>,

@@ -1,11 +1,10 @@
 use std::error::Error;
 use std::collections::HashMap;
 
-use crate::args::{Arguments, FilterType};
-use crate::args::FilterType::*;
-use crate::input::{open, Input};
+use crate::arg::args::{Arguments, FilterType, FilterType::*};
+use crate::handlers::input::{open, Input};
 
-pub fn handle_duplicates(args: Arguments) -> Result<(), Box<dyn Error>> {
+pub fn handle(args: Arguments) -> Result<(), Box<dyn Error>> {
 
     let Arguments { source, filter, .. } = args;
 
@@ -22,7 +21,7 @@ fn filter_by(source: impl Input, filter: FilterType) -> impl Iterator<Item = Str
     let column = source.column();
     let mut stats: HashMap<String, usize> = HashMap::new();
 
-    let lines: Vec<String> = source
+    let lines: Vec<_> = source
         .filter_map(|line| {
             let field = column.extract(&line)?;
             stats.entry(field.to_string())
@@ -55,7 +54,7 @@ fn check(occurences: usize, filter: &FilterType) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::input::tests::*;
+    use crate::handlers::input::tests::*;
 
     #[test]
     fn test_filter_duplicates() {
