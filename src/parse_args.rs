@@ -122,6 +122,7 @@ fn try_parse_filter(arg: &str) -> Result<Option<FilterType>, String> {
         "--also-in" => AlsoIn,
         "--in" => AlsoIn,
         "--duplicates" => Duplicates,
+        "--uniques" => Uniques,
         _ => {
             return Ok(None);
         }

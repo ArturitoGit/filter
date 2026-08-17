@@ -9,7 +9,8 @@ pub struct Arguments {
 pub enum FilterType {
     NotIn,
     AlsoIn,
-    Duplicates
+    Duplicates,
+    Uniques
 }
 
 #[derive(PartialEq, Debug)]

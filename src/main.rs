@@ -16,6 +16,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     let args = parse(env::args())?;
     match &args.filter {
         NotIn | AlsoIn =>  handle_compare(args),
-        Duplicates => handle_duplicates(args)
+        Duplicates | Uniques => handle_duplicates(args)
     }
 }
