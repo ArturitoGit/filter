@@ -1,4 +1,4 @@
-use crate::args::{Column, Source, CsvFile, clone_column};
+use crate::args::{Column, Source, CsvFile};
 
 use std::io;
 use std::io::{Stdin, Read, Lines, BufReader, BufRead};
@@ -34,8 +34,8 @@ enum StdinOrFile {
 impl Input for StdinOrFile {
     fn column(&self) -> Column {
         match self {
-            StdinOrFile::Stdin(_, column) => clone_column(&column),
-            StdinOrFile::File(_, column) => clone_column(&column)
+            StdinOrFile::Stdin(_, column) => column.clone(),
+            StdinOrFile::File(_, column) => column.clone()
         }
     }
 }
@@ -70,4 +70,48 @@ impl<T: Read> Iterator for LineReaderInput<T> {
         self.lines.next()
             .map(|line| line.unwrap())
     }
+}
+
+#[cfg(test)]
+pub mod tests {
+    use super::*;
+    use std::vec::IntoIter;
+    use crate::args::{Column};
+
+    pub struct VecInput {
+        lines: IntoIter<String>,
+        column: Column
+    }
+
+    impl Input for VecInput {
+        fn column(&self) -> Column {
+            self.column.clone()
+        }
+    }
+
+    impl Iterator for VecInput {
+        type Item = String;
+        fn next(&mut self) -> Option<String> {
+            self.lines.next()
+        }
+    }
+
+    pub fn column(column: usize, separator: &str, lines: Vec<&str>) -> VecInput {
+        let lines: Vec<String> = lines.into_iter()
+            .map(|it| String::from(it))
+            .collect();
+        VecInput {
+            lines: lines.into_iter(),
+            column: Column::Column(column, String::from(separator))
+        }
+    }
+
+    pub fn assert_result(actual: impl Iterator<Item = String>, expected: Vec<&str>) {
+        let expected_owned: Vec<String> = expected.into_iter()
+            .map(|it| String::from(it))
+            .collect();
+        let result: Vec<String> = actual.collect();
+        assert_eq!(expected_owned, result);
+    }
+
 }

@@ -6,6 +6,13 @@ pub struct Arguments {
 }
 
 #[derive(PartialEq, Debug)]
+pub enum FilterType {
+    NotIn,
+    AlsoIn,
+    Duplicates
+}
+
+#[derive(PartialEq, Debug)]
 pub enum Source {
     File(CsvFile),
     Stdin(Column)
@@ -23,16 +30,64 @@ pub enum Column {
     Column(usize, String)
 }
 
-pub fn clone_column(col: &Column) -> Column {
-    match col {
-        Column::EntireLine => Column::EntireLine,
-        Column::Column(size, sep) => Column::Column(*size, String::from(sep))
+impl Column {
+    pub fn clone(&self) -> Column {
+        match &self {
+            Column::EntireLine => Column::EntireLine,
+            Column::Column(size, sep) => Column::Column(*size, String::from(sep))
+        }
+    }
+
+    pub fn extract<'a>(&self, line: &'a str) -> Option<&'a str> {
+        let Column::Column(position, separator) = self else {
+            return Some(line);
+        };
+
+        if *position <= 0 {
+            return Some(line);
+        }
+
+        let fields: Vec<&str> = line.split(separator).collect();
+
+        let index = *position - 1; // The Position is 1-based in program arguments
+        if fields.len() <= index {
+            return None;
+        }
+
+        Some(fields[index])
     }
 }
 
-#[derive(PartialEq, Debug)]
-pub enum FilterType {
-    NotIn,
-    AlsoIn,
-    Duplicates
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    #[test]
+    fn extract_entire_line() {
+        let line = "Je m'appelle Henry";
+        let parsed = Column::EntireLine.extract(line);
+        assert_eq!("Je m'appelle Henry", parsed.unwrap());
+    }
+
+    #[test]
+    fn extract_is_1_based() {
+        let line = "Henry;4;petit";
+        let column = Column::Column(2, String::from(";"));
+        assert_eq!("4", column.extract(line).unwrap());
+    }
+
+    #[test]
+    fn extract_none_on_not_enough_fields() {
+        let line = "Henry;4;petit";
+        let column = Column::Column(7, String::from(";"));
+        assert_eq!(true, column.extract(line).is_none());
+    }
+
+    #[test]
+    fn extract_entire_line_on_column_0() {
+        let line = "Henry;4;petit";
+        let column = Column::Column(0, String::from(";"));
+        assert_eq!("Henry;4;petit", column.extract(line).unwrap());
+    }
 }

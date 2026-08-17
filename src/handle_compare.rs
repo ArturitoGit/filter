@@ -1,12 +1,48 @@
-use crate::args::Column;
-use crate::input::Input;
+use crate::args::{Arguments, Source};
+use crate::input::{open, Input};
 
-pub fn handle_not_in(source: impl Input, target: impl Input) -> impl Iterator<Item = String> {
+use std::error::Error;
+
+pub fn handle_not_in(args: Arguments) -> Result<(), Box<dyn Error>> {
+    let (source, target) = open_sources(args)?;
+    for output in filter_not_in(source, target) {
+        println!("{output}");
+    }
+    Ok(())
+}
+
+pub fn handle_also_in(args: Arguments) -> Result<(), Box<dyn Error>> {
+    let (source, target) = open_sources(args)?;
+    for output in filter_also_in(source, target) {
+        println!("{output}");
+    }
+    Ok(())
+}
+
+fn open_sources(args: Arguments) -> Result<(impl Input, impl Input), Box<dyn Error>> {
+    let Arguments { source, target, .. } = args;
+
+    // The target file is mandatory
+    let Some(target) = target else {
+        return Err(error("A target file is required for this filter"));
+    };
+
+    let source_input = open(source)?;
+    let target_input = open(Source::File(target))?;
+
+    Ok((source_input, target_input))
+}
+
+fn error(msg: &str) -> Box<dyn Error> {
+    Box::<dyn Error>::from(msg)
+}
+
+fn filter_not_in(source: impl Input, target: impl Input) -> impl Iterator<Item = String> {
     filter_source(source, target,
         |source_field, target_fields| !contains(source_field, target_fields))
 }
 
-pub fn handle_also_in(source: impl Input, target: impl Input) -> impl Iterator<Item = String> {
+fn filter_also_in(source: impl Input, target: impl Input) -> impl Iterator<Item = String> {
     filter_source(source, target,
         |source_field, target_fields| contains(source_field, target_fields))
 }
@@ -20,36 +56,17 @@ where F: Fn(&str, &Vec<String>) -> bool
     // Collect fields from target
     let target_fields: Vec<String> = target
         .filter_map(|line| {
-            extract(&line, &target_column)
+            target_column.extract(&line)
                 .map(|it| String::from(it))
         })
         .collect();
 
     // Filter lines from source on matching fields from target
-    source
-        .filter(move |line| {
-            extract(&line, &source_column)
-                .map(|field| filter(field, &target_fields))
-                .unwrap_or(false)
-        })
-}
-
-fn extract<'a>(line: &'a str, column: &Column) -> Option<&'a str> {
-    let Column::Column(position, separator) = column else {
-        return Some(line);
-    };
-    if *position <= 0 {
-        return Some(line);
-    }
-
-    let fields: Vec<&str> = line.split(separator).collect();
-
-    let index = *position - 1; // The Position is 1-based in program arguments
-    if fields.len() <= index {
-        return None;
-    }
-
-    Some(fields[index])
+    source.filter(move |line| {
+        source_column.extract(&line)
+            .map(|field| filter(field, &target_fields))
+            .unwrap_or(false)
+    })
 }
 
 fn contains(value: &str, target: &Vec<String>) -> bool {
@@ -59,44 +76,7 @@ fn contains(value: &str, target: &Vec<String>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::vec::IntoIter;
-    use crate::args::clone_column;
-
-    struct VecInput {
-        lines: IntoIter<String>,
-        column: Column
-    }
-
-    impl Input for VecInput {
-        fn column(&self) -> Column {
-            clone_column(&self.column)
-        }
-    }
-
-    impl Iterator for VecInput {
-        type Item = String;
-        fn next(&mut self) -> Option<String> {
-            self.lines.next()
-        }
-    }
-
-    fn column(column: usize, separator: &str, lines: Vec<&str>) -> VecInput {
-        let lines: Vec<String> = lines.into_iter()
-            .map(|it| String::from(it))
-            .collect();
-        VecInput {
-            lines: lines.into_iter(),
-            column: Column::Column(column, String::from(separator))
-        }
-    }
-
-    fn assert_result(actual: impl Iterator<Item = String>, expected: Vec<&str>) {
-        let expected_owned: Vec<String> = expected.into_iter()
-            .map(|it| String::from(it))
-            .collect();
-        let result: Vec<String> = actual.collect();
-        assert_eq!(expected_owned, result);
-    }
+    use crate::input::tests::*;
 
     #[test]
     fn it_handles_fields() {
@@ -113,7 +93,7 @@ mod tests {
             "Weasley,3"
         ]);
 
-        assert_result(handle_also_in(s1, s2), vec!["Minerva;Macgonagal", "Hermione;Granger", "Ronald;Weasley"]);
+        assert_result(filter_also_in(s1, s2), vec!["Minerva;Macgonagal", "Hermione;Granger", "Ronald;Weasley"]);
     }
 
     #[test]
@@ -131,6 +111,6 @@ mod tests {
             "Weasley,3"
         ]);
 
-        assert_result(handle_not_in(s1, s2), vec!["Harry;Potter"]);
+        assert_result(filter_not_in(s1, s2), vec!["Harry;Potter"]);
     }
 }
