@@ -1,40 +1,23 @@
 use std::error::Error;
 use std::collections::HashMap;
 
-use crate::args::Arguments;
+use crate::args::{Arguments, FilterType};
 use crate::args::FilterType::*;
 use crate::input::{open, Input};
 
 pub fn handle_duplicates(args: Arguments) -> Result<(), Box<dyn Error>> {
 
-    let Arguments { filter, source, .. } = args;
+    let Arguments { source, filter, .. } = args;
 
     let source = open(source)?;
 
-    match filter {
-        Duplicates => print_all(filter_duplicates(source)),
-        _ =>          print_all(filter_uniques(source))
-    }
+    filter_by(source, filter)
+        .for_each(|line| println!("{line}"));
 
     Ok(())
 }
 
-fn print_all(iter: impl Iterator<Item = String>) {
-    for line in iter {
-        println!("{line}");
-    }
-}
-
-fn filter_duplicates(source: impl Input) -> impl Iterator<Item = String> {
-    filter_by_occurence(source, |occurences| occurences > 1)
-}
-
-fn filter_uniques(source: impl Input) -> impl Iterator<Item = String> {
-    filter_by_occurence(source, |occurences| occurences == 1)
-}
-
-fn filter_by_occurence<F>(source: impl Input, predicate: F) -> impl Iterator<Item = String>
-where F: Fn(usize) -> bool
+fn filter_by(source: impl Input, filter: FilterType) -> impl Iterator<Item = String>
 {
     let column = source.column();
     let mut stats: HashMap<String, usize> = HashMap::new();
@@ -56,8 +39,17 @@ where F: Fn(usize) -> bool
             let occurences = stats.get(field)
                 .map(|it| *it)
                 .unwrap_or(0);
-            predicate(occurences)
+
+            check(occurences, &filter)
         })
+}
+
+fn check(occurences: usize, filter: &FilterType) -> bool {
+    match filter {
+        Uniques => occurences == 1,
+        Duplicates => occurences > 1,
+        _ => panic!("Invalid filter type")
+    }
 }
 
 #[cfg(test)]
@@ -75,7 +67,7 @@ mod tests {
             "Lilly;Potter"
         ]);
 
-        assert_result(filter_duplicates(source), vec!["James;Potter", "Harry;Potter", "Lilly;Potter"]);
+        assert_result(filter_by(source, Duplicates), vec!["James;Potter", "Harry;Potter", "Lilly;Potter"]);
     }
 
     #[test]
@@ -88,7 +80,7 @@ mod tests {
             "Lilly;Potter"
         ]);
 
-        assert_result(filter_uniques(source), vec!["Minerva;Macgonagal", "Hermione;Granger"]);
+        assert_result(filter_by(source, Uniques), vec!["Minerva;Macgonagal", "Hermione;Granger"]);
     }
 
     #[test]
@@ -101,6 +93,6 @@ mod tests {
             "Hermione;Granger"
         ]);
 
-        assert_result(filter_duplicates(source), vec!["James;Potter", "Ron;Weasley", "Arthur;Weasley", "Harry;Potter"]);
+        assert_result(filter_by(source, Duplicates), vec!["James;Potter", "Ron;Weasley", "Arthur;Weasley", "Harry;Potter"]);
     }
 }

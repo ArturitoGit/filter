@@ -1,6 +1,6 @@
-use crate::args::{Arguments, Source};
-use crate::input::{open, Input};
+use crate::args::{Arguments, Source, FilterType};
 use crate::args::FilterType::*;
+use crate::input::{open, Input};
 
 use std::error::Error;
 
@@ -15,32 +15,13 @@ pub fn handle_compare(args: Arguments) -> Result<(), Box<dyn Error>> {
     let source = open(source)?;
     let target = open(Source::File(target))?;
 
-    match filter {
-        NotIn => print_all(filter_not_in(source, target)),
-        _ =>     print_all(filter_also_in(source, target))
-    }
+    filter_source(source, filter, target)
+        .for_each(|line| println!("{line}"));
 
     Ok(())
 }
 
-fn print_all(iter: impl Iterator<Item = String>) {
-    for line in iter {
-        println!("{line}");
-    }
-}
-
-fn filter_not_in(source: impl Input, target: impl Input) -> impl Iterator<Item = String> {
-    filter_source(source, target,
-        |source_field, target_fields| !contains(source_field, target_fields))
-}
-
-fn filter_also_in(source: impl Input, target: impl Input) -> impl Iterator<Item = String> {
-    filter_source(source, target,
-        |source_field, target_fields| contains(source_field, target_fields))
-}
-
-fn filter_source<F>(source: impl Input, target: impl Input, filter: F) -> impl Iterator<Item = String>
-where F: Fn(&str, &Vec<String>) -> bool
+fn filter_source(source: impl Input, filter: FilterType, target: impl Input) -> impl Iterator<Item = String>
 {
     let source_column = source.column();
     let target_column = target.column();
@@ -56,13 +37,17 @@ where F: Fn(&str, &Vec<String>) -> bool
     // Filter lines from source on matching fields from target
     source.filter(move |line| {
         source_column.extract(&line)
-            .map(|field| filter(field, &target_fields))
+            .map(|field| check(field, &filter, &target_fields))
             .unwrap_or(false)
     })
 }
 
-fn contains(value: &str, target: &Vec<String>) -> bool {
-    target.iter().any(|v| v == value)
+fn check(field: &str, filter: &FilterType, target_field: &Vec<String>) -> bool {
+    match filter {
+        NotIn => !target_field.iter().any(|v| v == field),
+        AlsoIn => target_field.iter().any(|v| v == field),
+        _ => panic!("Invalid filter type")
+    }
 }
 
 fn error(msg: &str) -> Box<dyn Error> {
@@ -89,7 +74,7 @@ mod tests {
             "Weasley,3"
         ]);
 
-        assert_result(filter_also_in(s1, s2), vec!["Minerva;Macgonagal", "Hermione;Granger", "Ronald;Weasley"]);
+        assert_result(filter_source(s1, AlsoIn, s2), vec!["Minerva;Macgonagal", "Hermione;Granger", "Ronald;Weasley"]);
     }
 
     #[test]
@@ -107,6 +92,6 @@ mod tests {
             "Weasley,3"
         ]);
 
-        assert_result(filter_not_in(s1, s2), vec!["Harry;Potter"]);
+        assert_result(filter_source(s1, NotIn, s2), vec!["Harry;Potter"]);
     }
 }
