@@ -1,40 +1,32 @@
 use crate::args::{Arguments, Source};
 use crate::input::{open, Input};
+use crate::args::FilterType::*;
 
 use std::error::Error;
 
-pub fn handle_not_in(args: Arguments) -> Result<(), Box<dyn Error>> {
-    let (source, target) = open_sources(args)?;
-    for output in filter_not_in(source, target) {
-        println!("{output}");
-    }
-    Ok(())
-}
-
-pub fn handle_also_in(args: Arguments) -> Result<(), Box<dyn Error>> {
-    let (source, target) = open_sources(args)?;
-    for output in filter_also_in(source, target) {
-        println!("{output}");
-    }
-    Ok(())
-}
-
-fn open_sources(args: Arguments) -> Result<(impl Input, impl Input), Box<dyn Error>> {
-    let Arguments { source, target, .. } = args;
+pub fn handle_compare(args: Arguments) -> Result<(), Box<dyn Error>> {
+    let Arguments { source, target, filter } = args;
 
     // The target file is mandatory
     let Some(target) = target else {
         return Err(error("A target file is required for this filter"));
     };
 
-    let source_input = open(source)?;
-    let target_input = open(Source::File(target))?;
+    let source = open(source)?;
+    let target = open(Source::File(target))?;
 
-    Ok((source_input, target_input))
+    match filter {
+        NotIn => print_all(filter_not_in(source, target)),
+        _ =>     print_all(filter_also_in(source, target))
+    }
+
+    Ok(())
 }
 
-fn error(msg: &str) -> Box<dyn Error> {
-    Box::<dyn Error>::from(msg)
+fn print_all(iter: impl Iterator<Item = String>) {
+    for line in iter {
+        println!("{line}");
+    }
 }
 
 fn filter_not_in(source: impl Input, target: impl Input) -> impl Iterator<Item = String> {
@@ -71,6 +63,10 @@ where F: Fn(&str, &Vec<String>) -> bool
 
 fn contains(value: &str, target: &Vec<String>) -> bool {
     target.iter().any(|v| v == value)
+}
+
+fn error(msg: &str) -> Box<dyn Error> {
+    Box::<dyn Error>::from(msg)
 }
 
 #[cfg(test)]
